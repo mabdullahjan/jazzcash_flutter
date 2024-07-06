@@ -6,7 +6,9 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  jazzcash_flutter: <Latest Version>
+  jazzcash_flutter:
+    git:
+      url: https://github.com/mabdullahjan/jazzcash_flutter.git
 ```
 
 ### 2. Install it
