@@ -1,87 +1,88 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:http/http.dart' as http;
 
 class PaymentScreen extends StatefulWidget {
   final String request;
   final String returnUrl;
-
-  const PaymentScreen(this.request, this.returnUrl);
+  PaymentScreen(this.request, this.returnUrl);
 
   @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
+  _PaymentScreenState createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  final Completer<WebViewController> _controller =
-      Completer<WebViewController>();
+  late WebViewController controller;
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    if (Platform.isAndroid) {
-      WebView.platform = SurfaceAndroidWebView();
-    } else if (Platform.isIOS) {
-      WebView.platform = CupertinoWebView();
-    }
-  }
 
-  WebViewController ? _webViewController ;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: WebView(
-          initialUrl: htmlToURI(),
-          debuggingEnabled: false,
-          javascriptMode: JavascriptMode.unrestricted,
-          onWebViewCreated: (WebViewController webViewController) {
-            _controller.complete(webViewController);
-            _webViewController = webViewController;
-          },
-          onProgress: (int progress) {
-             debugPrint('debugPrint WebView is loading (progress : $progress%)');
-          },
-          javascriptChannels: <JavascriptChannel>{
-            _toasterJavascriptChannel(context),
-          },
-          onPageStarted: (String url) {
-            debugPrint('debugPrint Page started loading: $url');
-          },
-          onPageFinished: (String url) {
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (String url) {
+          setState(() {
+            _isLoading = true;
+            _hasError = false;
+          });
+        },
+        onPageFinished: (String url) {
+          setState(() {
+            _isLoading = false;
             debugPrint('debugPrint Page finished loading: $url');
             if (url == widget.returnUrl) {
               readJS(context);
             }
-          },
-          gestureNavigationEnabled: true,
-          backgroundColor: const Color(0x00000000),
+          });
+        },
+        onWebResourceError: (WebResourceError error) {
+          setState(() {
+            _isLoading = false;
+            _hasError = true;
+          });
+        },
+        onNavigationRequest: (NavigationRequest request) {
+          if (request.url.startsWith(widget.request)) {
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.request));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Scaffold(
+        body: Stack(
+          children: [
+            WebViewWidget(
+              controller: controller,
+            ),
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(),
+              ),
+            if (_hasError)
+              const Center(
+                child: Text(
+                  'Failed to load payment page.',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  JavascriptChannel _toasterJavascriptChannel(BuildContext context) {
-    return JavascriptChannel(
-        name: 'Toaster',
-        onMessageReceived: (JavascriptMessage message) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message.message)),
-          );
-        });
-  }
-
-  String htmlToURI() {
-    return Uri.dataFromString(widget.request,
-            mimeType: 'text/html', encoding: Encoding.getByName('utf-8'))
-        .toString();
-  }
-
   void readJS(BuildContext cont) async {
-    String html = await _webViewController!.runJavascriptReturningResult(
+    Object html = await controller!.runJavaScriptReturningResult(
         "window.document.getElementsByTagName('pre')[0].innerHTML;");
 
     try {
@@ -102,11 +103,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       // if(jsondecoded['pp_ResponseCode']=='000'){
       //
       // }
-
     } catch (err) {
       debugPrint('debugPrint exception $err');
       Navigator.pop(cont, null);
     }
-   // print("html response --> $html");
+    // print("html response --> $html");
   }
 }
