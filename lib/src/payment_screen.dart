@@ -82,7 +82,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void readJS(BuildContext cont) async {
-    Object html = await controller!.runJavaScriptReturningResult(
+    Object html = await controller!.runJavaScript(
         "window.document.getElementsByTagName('pre')[0].innerHTML;");
 
     try {
